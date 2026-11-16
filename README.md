@@ -3,6 +3,8 @@
 A lightweight web UI and **MCP bridge** for [Edge0](https://github.com/Edge0-AI/Edge0)
 models served locally by `edge0-infer serve`.
 
+![edge0-studio screenshot](docs/screenshot.png)
+
 Edge0 gives you an OpenAI- and Anthropic-compatible local server, but no UI and no
 tool execution. edge0-studio adds both:
 
