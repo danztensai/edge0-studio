@@ -45,8 +45,11 @@ async def status() -> JSONResponse:
     upstream: dict[str, Any] = {"base_url": config.base_url, "model": config.model,
                                 "reachable": False, "models": []}
     try:
+        headers = {}
+        if config.api_key:
+            headers["Authorization"] = f"Bearer {config.api_key}"
         async with httpx.AsyncClient(timeout=5) as client:
-            resp = await client.get(f"{config.base_url}/models")
+            resp = await client.get(f"{config.base_url}/models", headers=headers)
             if resp.status_code == 200:
                 upstream["reachable"] = True
                 upstream["models"] = [
