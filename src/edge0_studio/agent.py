@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import Any, AsyncIterator
 
 import httpx
@@ -38,15 +39,20 @@ class AgentLoop:
         messages: list[dict[str, Any]],
         temperature: float | None = None,
         use_tools: bool = True,
+        model: str | None = None,
     ) -> AsyncIterator[str]:
         """Yields SSE lines: token / thinking / tool_call / tool_result / done / error."""
         convo = list(messages)
         tools = self.mcp.openai_tools if use_tools else []
+        model_name = model or self.model
 
         async with httpx.AsyncClient(timeout=httpx.Timeout(600, connect=10)) as client:
+            started = time.monotonic()
+            first_token_at: float | None = None
+            total_tokens = 0
             for _round in range(MAX_TOOL_ROUNDS + 1):
                 body: dict[str, Any] = {
-                    "model": self.model,
+                    "model": model_name,
                     "messages": convo,
                     "stream": True,
                 }
@@ -88,6 +94,9 @@ class AgentLoop:
                                 yield _sse({"type": "thinking", "text": reasoning})
                             text = delta.get("content")
                             if text:
+                                if first_token_at is None:
+                                    first_token_at = time.monotonic()
+                                total_tokens += 1
                                 content_parts.append(text)
                                 yield _sse({"type": "token", "text": text})
                             for tc in delta.get("tool_calls") or []:
@@ -109,7 +118,22 @@ class AgentLoop:
                     return
 
                 if not tool_calls:
-                    yield _sse({"type": "done"})
+                    elapsed = time.monotonic() - started
+                    decode_s = (
+                        time.monotonic() - first_token_at if first_token_at else 0.0
+                    )
+                    yield _sse({
+                        "type": "done",
+                        "stats": {
+                            "total_seconds": round(elapsed, 2),
+                            "first_token_seconds": round(
+                                first_token_at - started, 2
+                            ) if first_token_at else None,
+                            "tokens": total_tokens,
+                            "tokens_per_second": round(total_tokens / decode_s, 1)
+                            if decode_s > 0.5 and total_tokens else None,
+                        },
+                    })
                     return
 
                 calls = [tool_calls[i] for i in sorted(tool_calls)]

@@ -67,10 +67,14 @@ async def status() -> JSONResponse:
 @app.post("/api/chat")
 async def chat(request: Request) -> StreamingResponse:
     body = await request.json()
-    messages = body.get("messages") or []
+    messages = list(body.get("messages") or [])
+    system_prompt = (body.get("system_prompt") or "").strip()
+    if system_prompt and not any(m.get("role") == "system" for m in messages):
+        messages.insert(0, {"role": "system", "content": system_prompt})
     temperature = body.get("temperature")
     use_tools = bool(body.get("use_tools", True))
+    model = body.get("model") or None
     return StreamingResponse(
-        agent.run(messages, temperature=temperature, use_tools=use_tools),
+        agent.run(messages, temperature=temperature, use_tools=use_tools, model=model),
         media_type="text/event-stream",
     )
